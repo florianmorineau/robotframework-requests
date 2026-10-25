@@ -186,42 +186,91 @@ class RequestsKeywords(object):
     @keyword("Create Multipart Data")
     def create_multipart_data(fields=None, files=None, files_first=False):
         """
-        Creates a ``multipart/form-data`` body, made of form ``fields`` and ``files``,
-        to be passed as ``data`` parameter to other requests keywords.
+        Creates a ``multipart/form-data`` body, made of form ``fields`` and ``files``, the format used
+        by HTML forms and by most APIs to upload files.
 
-        Files are streamed from disk instead of being read into memory, so this is suited for large uploads.
-        The ``Content-Type`` header, including the multipart boundary, is set automatically
-        when the request is sent, unless it is explicitly passed in the request ``headers``.
+        The returned body is passed as ``data`` to `POST On Session`, `PUT On Session`, `PATCH On Session`
+        or to the session-less `POST`, `PUT` and `PATCH` keywords. Files are streamed from disk while the
+        request is sent instead of being read into memory, so it is suited for large uploads too.
 
-        ``fields`` can be a dictionary or a list of ``(name, value)`` pairs, a list allows
-        to repeat the same field name. Values that are dictionaries or lists are sent as JSON strings.
+        This keyword requires the ``requests-toolbelt`` package, it can be installed with
+        ``pip install "robotframework-requests[multipart]"``.
 
-        ``files`` can be a dictionary of ``name=path`` or a list of files where each one is either
-        a list ``(name, path[, content_type[, filename]])`` or a dictionary with ``name``, ``path`` and
-        optional ``content_type`` and ``filename`` keys. A list allows to send several files with the same name,
-        as well as a list of paths in place of ``path``, e.g. ``(name, [path_1, path_2])`` or ``name=${paths}``.
-        When omitted, ``filename`` is the base name of ``path`` and ``content_type`` is guessed from it.
+        *Form fields*
+
+        ``fields`` is a dictionary of ``name=value`` or a list of ``(name, value)`` pairs.
+        A list allows to send the same field name several times.
+        Values that are dictionaries or lists are sent as JSON strings, other values as strings.
+
+        | ${settings}=    Create Dictionary    everything=${True}
+        | ${fields}=      Create Dictionary    action=add    settings=${settings}
+        | # sent as: action = add, settings = {"everything": true}
+        |
+        | ${tag_1}=       Create List    tag    one
+        | ${tag_2}=       Create List    tag    two
+        | ${fields}=      Create List    ${tag_1}    ${tag_2}
+        | # sent as: tag = one, tag = two
+
+        *Files*
+
+        ``files`` is a dictionary of ``name=path``, or a list where each file is described with one of
+        the following formats. A list allows to send several files with the same name.
+
+        | = Format =                               | = Description =                                                     |
+        | ``(name, path)``                         | File name and content type are taken from ``path``.                 |
+        | ``(name, path, content_type)``           | With its own content type.                                          |
+        | ``(name, path, content_type, filename)`` | With its own file name, ``content_type`` can be ``${None}``.        |
+        | ``(name, [path, ...])``                  | Several files with the same name.                                   |
+        | ``{name, path, content_type, filename}`` | A dictionary, ``content_type`` and ``filename`` keys are optional.  |
+
+        | ${file_1}=    Create List    document    ${CURDIR}/report.pdf
+        | ${file_2}=    Create List    document    ${CURDIR}/report    application/pdf
+        | ${file_3}=    Create List    document    ${CURDIR}/r.pdf    ${None}    report.pdf
+        | ${file_4}=    Create List    attachments    ${paths}
+        | ${file_5}=    Create Dictionary    name=document    path=${CURDIR}/report.pdf
+        | ${files}=     Create List    ${file_1}    ${file_4}
+
+        In a dictionary of ``name=path``, the path can also be a list of paths: ``attachments=${paths}``.
+        ``filename``, the file name given to the server, defaults to the base name of ``path``.
+        ``content_type`` defaults to the type guessed from the file name extension,
+        or ``application/octet-stream`` when it is unknown.
+
+        *Order of the parts*
 
         Parts are sent in the given order, fields first and then files.
         Set ``files_first`` to ``${True}`` for servers that expect the files before the fields.
 
-        Files are opened by this keyword and automatically closed by requests keywords once sent,
-        so the returned object can be used for one request only. Within that request the body
-        can be sent again from its start, so session retries and redirects resend it whole.
+        *Sending the body*
 
-        This keyword requires the ``requests-toolbelt`` package, it can be installed with
-        ``pip install robotframework-requests[multipart]``.
+        The ``Content-Type`` header, ``multipart/form-data`` with the generated boundary, is set
+        automatically when the request is sent, unless a ``Content-Type`` is explicitly passed in the
+        request ``headers``. Session headers, like an ``Authorization`` token, are sent as usual and
+        a ``Content-Type`` set on the session is replaced for this request only.
 
-        | ${fields}=     Create Dictionary    name=report    settings=${settings_dict}
-        | ${files}=      Create Dictionary    document=${CURDIR}/report.pdf
-        | ${multipart}=  Create Multipart Data    fields=${fields}    files=${files}
-        | ${resp}=       POST On Session    alias    /upload    data=${multipart}
-        |
-        | ${file_1}=     Create List    attachments    ${CURDIR}/a.txt
-        | ${file_2}=     Create List    attachments    ${CURDIR}/b.xml    application/xml    renamed.xml
-        | ${files}=      Create List    ${file_1}    ${file_2}
-        | ${multipart}=  Create Multipart Data    files=${files}
-        | ${resp}=       PUT On Session    alias    /upload    data=${multipart}
+        Files are opened by this keyword and closed by the requests keyword once the request is sent,
+        so create a new body for each request. Within that request the body can be sent again from its
+        start, so session retries and redirects resend it whole.
+
+        *Examples*
+
+        A file with form fields, on a session authenticated with a Bearer token:
+        | ${headers}=      Create Dictionary    Authorization=Bearer ${token}
+        | Create Session   api    https://example.com    headers=${headers}
+        | ${settings}=     Create Dictionary    everything=${True}
+        | ${fields}=       Create Dictionary    action=add    settings=${settings}
+        | ${files}=        Create Dictionary    document=${CURDIR}/report.pdf
+        | ${multipart}=    Create Multipart Data    fields=${fields}    files=${files}
+        | ${resp}=         POST On Session    api    /upload    data=${multipart}
+
+        Several files with the same name, a file with its own content type and file name,
+        sent before the fields:
+        | ${paths}=        Create List    ${CURDIR}/a.txt    ${CURDIR}/b.txt
+        | ${attachments}=  Create List    attachments    ${paths}
+        | ${metadata}=     Create List    metadata    ${CURDIR}/meta    application/xml    meta.xml
+        | ${files}=        Create List    ${attachments}    ${metadata}
+        | ${fields}=       Create Dictionary    action=add
+        | ${multipart}=    Create Multipart Data    fields=${fields}    files=${files}    files_first=${True}
+        | ${resp}=         PUT On Session    api    /upload    data=${multipart}
         """
         return create_multipart_encoder(fields, files, files_first)
 
