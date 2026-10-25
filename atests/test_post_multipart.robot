@@ -126,3 +126,43 @@ Test Post Multipart Data Keeps Session Headers
 
     Should Be Equal    ${resp.json()}[headers][Authorization]    Bearer some-token
     Should Be Equal    ${resp.json()}[headers][Content-Type]    ${multipart.content_type}
+
+Test Post Multipart Data Is Sent Whole Again After A 307 Redirect
+    ${fields}=    Create Dictionary    action=add
+    ${files}=    Create Dictionary    document=${CURDIR}${/}data.json
+    ${multipart}=    Create Multipart Data    fields=${fields}    files=${files}
+
+    ${resp}=    POST On Session    ${GLOBAL_SESSION}    /redirect-to    params=url=/anything&status_code=307    data=${multipart}
+
+    Should Be Equal As Strings    ${resp.history[0].status_code}    307
+    Should Be Equal    ${resp.json()}[form][action]    add
+    ${expected}=    Get Binary File    ${CURDIR}${/}data.json
+    Should Be Equal    ${resp.json()}[files][document]    ${expected.decode('utf-8')}
+
+Test Post Multipart Data With Files Described By Dictionaries
+    ${file}=    Create Dictionary    name=document    path=${CURDIR}${/}data.json
+    ...    filename=renamed.json    content_type=application/json
+    ${files}=    Create List    ${file}
+    ${fields}=    Create Dictionary    count=${3}
+    ${multipart}=    Create Multipart Data    fields=${fields}    files=${files}
+
+    Should Be Equal    ${multipart.fields}[1][1][0]    renamed.json
+    Should Be Equal    ${multipart.fields}[1][1][2]    application/json
+
+    ${resp}=    POST On Session    ${GLOBAL_SESSION}    /anything    data=${multipart}
+
+    Should Be Equal    ${resp.json()}[form][count]    3
+    ${expected}=    Get Binary File    ${CURDIR}${/}data.json
+    Should Be Equal    ${resp.json()}[files][document]    ${expected.decode('utf-8')}
+
+Test Create Multipart Data Fails Clearly With Invalid Arguments
+    Run Keyword And Expect Error    ValueError: Multipart fields must be a dictionary or a list of (name, value) pairs*
+    ...    Create Multipart Data    fields=${{["not a pair"]}}
+    Run Keyword And Expect Error    ValueError: Multipart files must be (name, path*
+    ...    Create Multipart Data    files=${{[("document",)]}}
+    Run Keyword And Expect Error    ValueError: Multipart file needs a name and a path*
+    ...    Create Multipart Data    files=${{[{"name": "document"}]}}
+    ${existing}=    Create List    document    ${CURDIR}${/}data.json
+    ${missing}=    Create List    missing    ${CURDIR}${/}does_not_exist.bin
+    Run Keyword And Expect Error    FileNotFoundError: *does_not_exist.bin*
+    ...    Create Multipart Data    files=${{[$existing, $missing]}}
