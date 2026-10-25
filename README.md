@@ -101,6 +101,19 @@ Post Request Test
     Status Should Be                 201  ${resp}                                                      
 ```
 
+### 📎 Multipart form data upload
+
+`Create Multipart Data` builds a streamed `multipart/form-data` body with form fields and files,
+it needs an optional dependency: `pip install "robotframework-requests[multipart]"`
+
+```robotframework
+Upload Report Test
+    ${fields}=       Create Dictionary    name=report    action=add
+    ${files}=        Create Dictionary    document=${CURDIR}/report.pdf
+    ${multipart}=    Create Multipart Data    fields=${fields}    files=${files}
+    ${resp}=         POST On Session    api    /upload    data=${multipart}
+```
+
 ### 📖 Keywords documentation
 
 Robotframework-requests offers a wide set of keywords which can be found in
