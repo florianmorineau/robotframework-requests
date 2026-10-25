@@ -32,6 +32,10 @@ def _rewindable_multipart_encoder_class():
             self._position += len(data)
             return data
 
+        def __iter__(self):
+            # requests only records the body position, needed to rewind it on redirects, for iterable bodies
+            return iter(lambda: self.read(8192), b"")
+
         def tell(self):
             return self._position
 

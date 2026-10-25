@@ -5,6 +5,7 @@ import socket
 import threading
 
 import pytest
+from requests import Request
 from requests.utils import super_len
 from urllib3.util.request import rewind_body, set_file_position
 
@@ -193,6 +194,21 @@ def test_multipart_rewind_contract_used_by_urllib3_and_requests():
     body = encoder.read()
     close(encoder)
     assert body == expected
+
+
+def test_multipart_is_prepared_by_requests_as_a_rewindable_stream():
+    encoder = create_multipart_data({'name': 'value'}, {'document': DATA_JSON})
+    expected = encoder.to_string()
+    encoder.seek(0)
+    prepared = Request('POST', 'http://mock.rulezz', data=encoder).prepare()
+    # the body position is what requests uses to rewind the body on 307 / 308 redirects
+    assert prepared._body_position == 0
+    assert prepared.headers['Content-Length'] == str(len(expected))
+    assert 'Transfer-Encoding' not in prepared.headers
+    assert b''.join(encoder) == expected
+    encoder.seek(0)
+    assert b''.join(encoder) == expected
+    close(encoder)
 
 
 def _cut_first_connection_server(received):
