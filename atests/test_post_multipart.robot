@@ -59,8 +59,9 @@ Test Post Multipart Data With Fields And Files On Session
     Should Be Equal    ${resp.json()}[headers][Content-Type]    ${multipart.content_type}
     Should Be Equal    ${resp.json()}[form][action]    add
     Should Be Equal    ${resp.json()}[form][settings]    {"everything": true}
-    ${expected}=    Get File    ${CURDIR}${/}data.json
-    Should Be Equal    ${resp.json()}[files][document]    ${expected}
+    # raw bytes: Get File would turn the CRLF line endings of a Windows checkout into LF
+    ${expected}=    Get Binary File    ${CURDIR}${/}data.json
+    Should Be Equal    ${resp.json()}[files][document]    ${expected.decode('utf-8')}
 
 Test Put Multipart Data With Repeated Fields And Files On Session
     ${tag_1}=    Create List    tag    one
